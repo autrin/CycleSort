@@ -1,0 +1,355 @@
+
+//TEAM MEMBERS:
+//Tanner Smith: TRS3103 (TRS3103@iastate.edu)
+//Autrin Hakimi: Ahakimi (ahakimi@iastate.edu)
+
+B MAIN
+///////////////////
+FILL: 
+    // primary:  X0=&A[]    X1=n
+    // X9 = i,   X10 = n-i-1,    X11 = i,   X12 = &a[i]
+    ADDI X9, XZR, #0        // i=0
+
+    TOP_OF_FILL_LOOP:
+    SUB X10, X1, X9        // X10 = n-i
+    CBZ X10, END_OF_FILL_LOOP // if n-i=0, goto END_OF_FILL_LOOP
+    SUBI X10, X10, #1       // X10 = n-i-1
+    ADD X12, XZR, X9        // X12 = i
+    LSL X12, X12, #3        // X12 = i*8
+    ADD X12, X0, X12       // X12 = &A[i]
+    STUR X10, [X12, #0]     // A[i] = n-i-1
+    ADDI X9, X9, #1         // i++
+    B TOP_OF_FILL_LOOP
+
+    END_OF_FILL_LOOP: 
+    BR LR
+    
+//////////////////////SWAP////////////////////////////////////////////
+SWAP: 
+    //parameters: X0 = &a[i], X1 = b
+    //temperaries: X9 = tmp, X10 another temp
+    LDUR X9, [X1, #0]   // X9 = stack[X1 + 0]
+    STUR X0, [X1, #0]   // stack[X1 + 0] = X0
+    ADD X0, XZR, X9     // X0 = X9
+    BR LR
+
+///////////////////////////FIND INDEX//////////////////////////////////
+FIND_INDEX:
+    //Parameters: X0: &a[0] (aka a[]),  X1: n,  X2: start,  X3: value
+    //Temperaries X9: i,  X10: index,  X11: a[i],  X12: n-i (for loop checking)
+    //X7: RETURN VALUE
+    ADD X10, XZR, X2        //index = start
+    ADDI X9, X2, #1         //i = start + 1 // jUST CHANGED THIS TO BE i = start
+    TOP_FIND_INDEX_LOOP:
+        SUB X12, X1, X9     //X12 = n-i
+        CBZ X12, END_FIND_INDEX_LOOP
+        LSL X11, X9, #3     //X11 = i*8
+        ADD X11, X11, X0    //X11 = &a[i]
+        LDUR X11, [X11, #0] //X11 = a[i]
+        
+        SUBS XZR, X11, X3   //set compare flag (if X11-X3 sets the negative flag to 1, that means a[i] < value)
+        B.GE SKIP_INDEX_INC //you want to increment index if a[i] < value, which means you want to SKIP this increment if a[i] >= value. Therefore you want to take this branch which skips over the increment command only if a[i]>=value)
+        ADDI X10, X10, #1   //index++
+        SKIP_INDEX_INC:
+        ADDI X9, X9, #1     //i++ (for loop incrementer)
+        B TOP_FIND_INDEX_LOOP
+
+    END_FIND_INDEX_LOOP:
+        ADD X7, XZR, X10
+        BR LR
+
+////////////////////////BINARY SEARCH ///////////////////////////////
+BINARY_SEARCH:
+	ADD X19, X0, XZR				// X19 is the array address (a) --> X0
+	ADD X9, X2, XZR				// X9 is the starting value (inclusive) --> X1
+	ADD X10, X3, XZR				// X10 is the end value (exclusive)
+	ADD X20, X4, XZR				// X20 is the value we are searching for --> X3
+
+	SUBI SP, SP, #16
+	STUR LR, [SP, #0]
+    STUR X1, [SP, #8]
+
+	ADD X11, X9, X10				// X11 = start + end
+	LSR X11, X11, #1				// X11 = X11 / 2
+
+	SUBS XZR, X10, X20
+	B.LT VALUE_UNFOUND
+
+	LSL X12, X11, #3
+	ADD X12, X12, X19
+	LDUR X12, [X12, #0]
+
+	SUBS XZR, X12, X20
+	B.EQ VALUE_FOUND
+
+	SUBS XZR, X12, X20
+	B.GT INDEX_GT_VALUE
+
+	B INDEX_LT_VALUE
+
+	INDEX_GT_VALUE:
+		ADD X0, X19, XZR
+		ADD X1, X9, XZR
+		SUBI X2, X11, #1
+		ADD X3, X20, XZR
+		BL BINARY_SEARCH
+
+	INDEX_LT_VALUE:
+		ADD X0, X19, XZR
+		ADDI X1, X11, #1
+		ADD X2, X10, XZR
+		ADD X3, X20, XZR
+		BL BINARY_SEARCH
+
+	VALUE_FOUND:
+        ADD X7, XZR, X11
+		B DONE
+
+	VALUE_UNFOUND:
+        ADDI X7, XZR, #-1
+		B DONE
+
+	DONE:
+		LDUR LR, [SP, #0]
+        LDUR X1, [SP, #8]
+		ADDI SP, SP, #16
+		BR LR
+
+//////////////////SKIP DUPLICATES//////////////////////////////////////
+SKIP_DUPLICATES: 
+    //Parameters:  X0:&a[]   X1:Start   X2:value   
+    //Temperarys:   X9:index   X10:a[index]
+    ADDI X9, X1, #0 //INDEX=START
+    TOP_SKIP_DUPLICATES_LOOP:
+        LSL X10, X9, #3 // index * 8
+        ADD X10, X10, X0 // &a[index]
+        LDUR X10, [X10, #0] // a[index]
+
+        SUBS XZR, X2, X10
+        B.NE END_SKIP_DUPLICATES_LOOP
+        ADDI X9, X9, #1
+        B TOP_SKIP_DUPLICATES_LOOP
+
+    END_SKIP_DUPLICATES_LOOP:
+        ADD X7, XZR, X9
+        BR LR
+
+//////////////////COMPLETE CYCLE/////////////////
+COMPLETE_CYCLE: 
+    //Params:  X0:&a[]   X1:n   X2:Start   X3:index   X4:value   
+    //Temps:   X9:start-index   X10:swapTemp   X11:&a[index]
+    //store the return register
+    SUBI SP, SP, #8
+    STUR LR, [SP, #0]
+    TOP_OF_COMPLETE_CYCLE_WHILE_LOOP:
+        SUB X9, X2, X3   //start - index
+        //DUMP
+        CBZ X9, END_OF_COMPLETE_CYCLE_LOOP  //check to see if start-index=0. If so, they are the same so we break the while loop
+        //CALL TO FIND_INDEX
+        SUBI SP, SP, #40 // setting up the stack
+        STUR X0, [SP, #0] // save the register
+        STUR X1, [SP, #8]
+        STUR X2, [SP, #16]
+        STUR X3, [SP, #24]
+        STUR X4, [SP, #32]
+        //a is already in X0, n is already in X1, start is already in X2
+        ADD X3, XZR, X4 //putting 'value' into X3 parameter register for call to FIND_INDEX index=value
+        BL FIND_INDEX
+        LDUR X0, [SP, #0] // restoring the stack
+        LDUR X1, [SP, #8]
+        LDUR X2, [SP, #16]
+        LDUR X3, [SP, #24] //we could delete this line and the corresponding store since we immediately overwrite it in the line below (ADD X3 XZR X7)
+        LDUR X4, [SP, #32]
+        ADDI SP, SP, #40
+        ADD X3, XZR, X7 // index = find_index(a, n, start, value)
+        
+        //CALL TO SKIP_DUPLICATES
+        SUBI SP, SP, #24 // setting up the stack
+        STUR X0, [SP, #0] // save the register
+        STUR X1, [SP, #8]
+        STUR X2, [SP, #16]
+        //a is already in X0
+        ADD X1, XZR, X3  //putting 'index' into X1 parameter register for call to SKIP_DUPLICATS
+        ADD X2, XZR, X4  //putting 'value' into X2 paramter register for call to SKIP_DUPLICATES
+        BL SKIP_DUPLICATES
+        LDUR X0, [SP, #0] // restoring the stack
+        LDUR X1, [SP, #8]
+        LDUR X2, [SP, #16]
+        ADDI SP, SP, #24
+        ADD X3, XZR, X7 // index = find_index(a, n, start, value)
+        
+        //PREPARING POINTERS FOR SWAP
+        //make X11 = &a[index]
+        LSL X11, X3, #3  //X11=index*8
+        ADD X11, X11, X0 //X11 = &a[index]
+        //inplace SWAP (X4=val, X11=&a[index])
+        LDUR X10, [X11, #0]  //X10 = a[index]
+        STUR X4, [X11, #0]   //a[index] = value
+        ADD X4, XZR, X10     //value = a[index]
+        
+        
+        LDUR X4, [XZR, #64] //load 'value' that we had shoved into memory back into the register
+        
+        B TOP_OF_COMPLETE_CYCLE_WHILE_LOOP
+        
+    END_OF_COMPLETE_CYCLE_LOOP:
+    //restore the return register
+    LDUR LR, [SP, #0]
+    ADDI SP, SP, #8
+    BR LR
+
+/////////////////////////CYCLE SORT////////////////////
+CYCLE_SORT: //Parameters: X0: &a[0] (aka a[]),  X1: n
+            //Temperaries: X9: swapTemp, X10: &a[idx], X11: n - 1
+            //Saved: X19: cstart, X20: val, X21: idx
+    //Storing link register
+    SUBI SP, SP, #8
+    STUR LR, [SP, #0]
+            
+    ADDI X19, XZR, #0 // cstart = 0
+    TOP_CYCLE_SORT_LOOP:
+        SUBI X11, X1, #1 // X11 = n - 1
+        SUBS XZR, X19, X11 // Checks to see if cstart >= n - 1, if so then break loop
+        B.GE END_CYCLE_SORT_LOOP
+        //val = a[cstart];
+        LSL X20, X19, #3 // X20 = cstart * 8
+        ADD X20, X20, X0 //  X20 = &a[cstart] 
+        LDUR X20, [X20, #0] // X20 = val= a[cstart]
+        
+        //CALL TO FIND_INDEX
+        SUBI SP, SP, #32 // setting up the stack
+        STUR X0, [SP, #0] // save the register
+        STUR X1, [SP, #8]
+        STUR X2, [SP, #16]
+        STUR X3, [SP, #24]
+        //setting up parameters
+        //a is already in X0
+        //n is already in X1
+        ADD X2, XZR, X19  //putting cstart into X2 for FIND_INDEX
+        ADD X3, XZR, X20  //putting 'val' into X3 param reg for call to FIND_INDEX
+        BL FIND_INDEX
+        LDUR X0, [SP, #0] // restoring the stack
+        LDUR X1, [SP, #8]
+        LDUR X2, [SP, #16]
+        LDUR X3, [SP, #24]
+        ADDI SP, SP, #32
+        ADD X21, XZR, X7 // idx = find_index(a, n, start, value)
+
+        //IF LOOP
+        SUBS XZR, X21, X19 // Checks to see if idx == cstart, if so then 'continue'
+        B.EQ CYCLE_SORT_CONTINUE
+        
+        //CALL TO SKIP_DUPLICATES  idx = skip_duplicates(a, idx, val);
+        SUBI SP, SP, #24 // setting up the stack
+        STUR X0, [SP, #0] // save the register
+        STUR X1, [SP, #8]
+        STUR X2, [SP, #16]
+        //a is already in X0
+        ADD X1, XZR, X21  //putting 'idx' into X1 parameter register for call to SKIP_DUPLICATS
+        ADD X2, XZR, X20  //putting 'val' into X2 paramter register for call to SKIP_DUPLICATES
+        BL SKIP_DUPLICATES
+        LDUR X0, [SP, #0] // restoring the stack
+        LDUR X1, [SP, #8]
+        LDUR X2, [SP, #16]
+        ADDI SP, SP, #24
+        ADD X21, XZR, X7 // idx = skip_duplicates(a, idx, val)
+        
+        
+        //PREPARING POINTERS FOR SWAP
+        //make X10 = &a[idx]
+        LSL X10, X21, #3  //X10=idx*8
+        ADD X10, X10, X0 //X10 = &a[idx]
+        //inPlace SWAP (X20=val, X10=&a[idx])
+        LDUR X9, [X10, #0]      //X9=a[idx]
+        STUR X20, [X10, #0]     //a[idx]=value
+        ADD X20, XZR, X9        //value=a[idx]
+
+        
+        //CALL TO COMPLETE CYCLE complete_cycle(a, n, cstart, idx, val);
+        SUBI SP, SP, #40 //preparing the stack
+        STUR X0, [SP, #0]
+        STUR X1, [SP, #8]
+        STUR X2, [SP, #16]
+        STUR X3, [SP, #24]
+        STUR X4, [SP, #32]
+        //a is already in register X0
+        //n is already in register X1
+        ADD X2, XZR, X19 // X2 = cstart
+        ADD X3, XZR, X21 // X3 = idx
+        ADD X4, XZR, X20 // X4 = val
+        BL COMPLETE_CYCLE
+        LDUR X0, [SP, #0]
+        LDUR X1, [SP, #8]
+        LDUR X2, [SP, #16]
+        LDUR X3, [SP, #24]
+        LDUR X4, [SP, #32]
+        ADDI SP, SP, #40
+
+        CYCLE_SORT_CONTINUE:
+        ADDI X19, X19, #1
+        B TOP_CYCLE_SORT_LOOP
+     
+    END_CYCLE_SORT_LOOP:
+    //restoring link register
+    LDUR LR, [SP, #0]
+    ADDI SP, SP, #4
+
+    BR LR
+///////////////////MAIN/////////////////////
+MAIN:
+    
+    ADDI X25, XZR, #512    //X25 = N = 512 (GLOBAL VARIABLE)
+    
+    //parameter setup and call to FILL
+    ADD X1, XZR, X25
+	ADDI X0, XZR, #0
+	BL FILL
+
+	BL CYCLE_SORT
+	//DUMP
+    // X0 = *a
+    // X2 = start
+    // X3 = end
+    // X20 = value we are searching for
+    
+    ADD X0, XZR, XZR //X0 = 0 = &a[0]
+    ADD X1, XZR, X25 // N
+    ADD X2, XZR, XZR //X2 = 0 = start
+    ADD X3, XZR, X1 // X3 = n
+    SUBI X3, X3, #1 // X3 = n - 1
+    ADDI X4, XZR, #0 // X4 = value = 0
+    // binary_search(a, 0 (start) , N - 1 (end) , 0 (value));
+    BL BINARY_SEARCH
+    // returns 0
+    PRNT X7 // should be 0
+
+    ADD X0, XZR, XZR //X0 = 0 = &a[0]
+    ADD X1, XZR, X25 // N
+    ADD X2, XZR, XZR //X2 = 0 = start
+    ADD X3, XZR, X1 // X3 = n
+    SUBI X3, X3, #1 // X3 = n - 1
+    ADD X4, XZR, X3 // X4 = value = n - 1
+    // binary_search(a, 0, N - 1, N - 1)
+    BL BINARY_SEARCH
+    PRNT X7 // should be N - 1
+
+    ADD X0, XZR, XZR //X0 = 0 = &a[0]
+    ADD X1, XZR, X25 // N
+    ADD X2, XZR, XZR //X2 = 0 = start
+    ADD X3, XZR, X1 // X3 = n
+    SUBI X3, X3, #1 // X3 = n - 1
+    ADD X4, XZR, X1 // X4 = value = n
+    LSR X4, X4, #1 // X4 = value = n/2
+    // binary_search(a, 0, N - 1, N / 2);
+    BL BINARY_SEARCH
+    PRNT X7 // returns N / 2
+
+    ADD X0, XZR, XZR //X0 = 0 = &a[0]
+    ADD X1, XZR, X25 // N
+    ADD X2, XZR, XZR //X2 = 0 = start
+    ADD X3, XZR, X1 // X3 = n
+    SUBI X3, X3, #1 // X3 = n - 1
+    ADD X4, XZR, X1 // X4 = value = n
+    // binary_search(a, 0, N - 1, N);
+    BL BINARY_SEARCH
+    PRNT X7 // returns -1
